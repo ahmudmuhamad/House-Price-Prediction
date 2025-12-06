@@ -7,17 +7,17 @@ from botocore.exceptions import NoCredentialsError
 # CONFIGURATION
 # ==========================================
 BUCKET_NAME = "my-house-price-bucket-ml-project"
-REGION = "Europe (Stockholm) eu-north-1"                        
+REGION = "eu-north-1"                        
 
 # Define what to upload and where it goes in S3
 UPLOAD_RULES = {
     # Local Path : S3 Folder Key
-    "data/raw/data.csv": "data/raw/data.csv",
-    "data/processed/train_processed.csv": "data/processed/train_processed.csv",
-    "data/processed/eval_processed.csv": "data/processed/eval_processed.csv",
-    "data/processed/holdout_processed.csv": "data/processed/holdout_processed.csv",
+    "data/processed/train_cleaned.csv": "data/processed/train_cleaned.csv",
+    "data/processed/eval_cleaned.csv": "data/processed/eval_cleaned.csv",
+    "data/processed/holdout_cleaned.csv": "data/processed/holdout_cleaned.csv",
     "models/artifacts/imputer.json": "artifacts/imputer.json",
-    "models/artifacts/freq_map.pkl": "artifacts/freq_map.pkl"
+    "models/artifacts/freq_map.pkl": "artifacts/freq_map.pkl",
+    "models/model.pkl": "model.pkl"
 }
 
 def upload_files():
@@ -46,6 +46,4 @@ def upload_files():
     print("\n✅ Upload Complete!")
 
 if __name__ == "__main__":
-    # Make sure you have set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY env vars
-    # or configured them via 'aws configure' in terminal
     upload_files()
