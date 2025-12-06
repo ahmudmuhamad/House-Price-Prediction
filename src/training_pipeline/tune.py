@@ -5,7 +5,7 @@ Hyperparameter Tuning Script (Optuna).
 - Logic:
     1. Runs Optuna optimization on XGBoost.
     2. Logs results to MLflow nested runs.
-    3. Prints the best parameters (to be copied into train.py or config).
+    3. Prints the best parameters (to be updated in train.py).
 """
 
 import optuna
@@ -19,12 +19,16 @@ from sklearn.compose import TransformedTargetRegressor
 from sklearn.impute import SimpleImputer
 from sklearn.metrics import mean_squared_error
 
-PROCESSED_DIR = Path("data/processed")
+# Default Paths
+SCRIPT_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = SCRIPT_DIR.parent.parent
+PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
 DROP_COLS = ["price", "date", "year", "city", "state_id", "zipcode"]
 
-def load_data():
-    train = pd.read_csv(PROCESSED_DIR / "train_processed.csv")
-    eval_df = pd.read_csv(PROCESSED_DIR / "eval_processed.csv")
+def load_data(data_dir: Path):
+    """Load data from the specified directory."""
+    train = pd.read_csv(Path(data_dir) / "train_processed.csv")
+    eval_df = pd.read_csv(Path(data_dir) / "eval_processed.csv")
     
     X_train = train.drop(columns=DROP_COLS, errors="ignore").select_dtypes(include=[np.number])
     y_train = train["price"]
@@ -34,13 +38,25 @@ def load_data():
     
     return X_train, y_train, X_eval, y_eval
 
-def run_tuning(n_trials: int = 15):
-    mlflow.set_tracking_uri("http://127.0.0.1:8000")
+def run_tuning(n_trials: int = 15, data_dir: Path = PROCESSED_DIR):
+    """
+    Run Optuna Tuning.
+    Args:
+        n_trials: Number of trials to run.
+        data_dir: Directory containing processed data (allows testing overrides).
+    """
+    mlflow.set_tracking_uri("http://127.0.0.1:8080")
     mlflow.set_experiment("House Price Prediction - Tuning")
     
-    X_train, y_train, X_eval, y_eval = load_data()
-    
+    print(f"⏳ Loading data from {data_dir}...")
+    try:
+        X_train, y_train, X_eval, y_eval = load_data(data_dir)
+    except FileNotFoundError:
+        print(f"❌ Data not found in {data_dir}. Run feature pipeline first.")
+        return {}
+
     def objective(trial):
+        # Search Space
         params = {
             "n_estimators": trial.suggest_int("n_estimators", 300, 1000),
             "max_depth": trial.suggest_int("max_depth", 3, 9),
@@ -56,11 +72,13 @@ def run_tuning(n_trials: int = 15):
         }
         
         with mlflow.start_run(nested=True):
+            # Same pipeline structure as training
             pipeline = Pipeline([
                 ('imputer', SimpleImputer(strategy='median')),
                 ('regressor', XGBRegressor(**params))
             ])
             
+            # Target Transform
             model = TransformedTargetRegressor(
                 regressor=pipeline, 
                 func=np.log1p, 
@@ -71,6 +89,7 @@ def run_tuning(n_trials: int = 15):
             preds = model.predict(X_eval)
             rmse = np.sqrt(mean_squared_error(y_eval, preds))
             
+            # Log params & metric
             mlflow.log_params(params)
             mlflow.log_metric("rmse", rmse)
             
@@ -83,7 +102,12 @@ def run_tuning(n_trials: int = 15):
         
         print("\n🏆 Best Params Found:")
         print(study.best_params)
+        
+        # Log bests to parent run
         mlflow.log_params(study.best_params)
+        mlflow.log_metric("best_rmse", study.best_value)
+        
+    return study.best_params
 
 if __name__ == "__main__":
     run_tuning(n_trials=10)

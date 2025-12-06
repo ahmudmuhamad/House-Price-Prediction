@@ -1,15 +1,15 @@
 """
 Train the Production Model.
 
-- Reads from: data/processed/ (train_processed.csv + eval_processed.csv)
+- Reads from: data/processed/ (train.csv + eval.csv)
 - Logic:
     1. Combines Train + Eval datasets (Maximize data for production).
-    2. drops non-feature columns (date, year, raw zipcode).
+    2. Drops non-feature columns (date, year, raw zipcode).
     3. Trains the Champion XGBoost model (TransformedTargetRegressor).
     4. Logs to MLflow.
 - Saves model to: models/ (and MLflow artifact store)
 """
-
+import joblib
 import pandas as pd
 import numpy as np
 import mlflow
@@ -21,12 +21,21 @@ from sklearn.compose import TransformedTargetRegressor
 from sklearn.impute import SimpleImputer
 from mlflow.models import infer_signature
 
-# Setup Paths
-PROCESSED_DIR = Path("data/processed")
-MODEL_DIR = Path("models")
+# ==========================================
+# 1. ROBUST PATH SETUP
+# ==========================================
+# Get the absolute path of THIS script (src/training_pipeline/train.py)
+SCRIPT_DIR = Path(__file__).resolve().parent
+
+# Go up 2 levels to get to the project root (e2e_house_price_estimator)
+PROJECT_ROOT = SCRIPT_DIR.parent.parent
+
+# Define paths relative to the Project Root
+PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
+MODEL_DIR = PROJECT_ROOT / "models"
 MODEL_DIR.mkdir(exist_ok=True)
 
-# 🏆 Champion Parameters (Found via Optuna in Notebook 08)
+# 🏆 Champion Parameters (Found via Optuna)
 CHAMPION_PARAMS = {
     'n_estimators': 766,
     'max_depth': 8,
@@ -41,16 +50,21 @@ CHAMPION_PARAMS = {
     'tree_method': "hist"
 }
 
-# Features to DROP (Not used for training)
-# Note: We keep 'month' for seasonality, but drop 'year' to avoid overfitting to specific years
-# (The inflation signal is captured by 'median_list_price')
 DROP_COLS = ["price", "date", "year", "city", "state_id", "zipcode"]
 
 def load_and_combine_data(data_dir: Path):
     """Load train and eval, combine them for production training."""
-    print("   Loading datasets...")
-    train = pd.read_csv(data_dir / "train_processed.csv")
-    eval_df = pd.read_csv(data_dir / "eval_processed.csv")
+    print(f"   Loading datasets from: {data_dir}")
+    
+    # CHECK: Ensure files exist before reading
+    train_path = data_dir / "train.csv"
+    eval_path = data_dir / "eval.csv"
+    
+    if not train_path.exists():
+        raise FileNotFoundError(f"❌ Could not find {train_path}. Check your 'data/processed' folder.")
+
+    train = pd.read_csv(train_path)
+    eval_df = pd.read_csv(eval_path)
     
     # Concatenate for maximum data density
     full_df = pd.concat([train, eval_df], axis=0).reset_index(drop=True)
@@ -65,7 +79,7 @@ def load_and_combine_data(data_dir: Path):
 def train_model(
     data_dir: Path = PROCESSED_DIR,
     params: dict = CHAMPION_PARAMS,
-    experiment_name: str = "House Price Prediction - Production"
+    experiment_name: str = "Experiment Tracking - House Price Prediction"
 ):
     mlflow.set_tracking_uri("http://127.0.0.1:8000")
     mlflow.set_experiment(experiment_name)
@@ -108,6 +122,9 @@ def train_model(
         
         print(f"✅ Model trained and logged to MLflow run: {mlflow.active_run().info.run_id}")
         print(f"   Model URI: {model_info.model_uri}")
+        local_path = MODEL_DIR / "model.pkl"
+        joblib.dump(final_model, local_path)
+        print(f"💾 Model saved locally to: {local_path}")
         
     return final_model
 
