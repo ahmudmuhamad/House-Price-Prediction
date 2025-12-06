@@ -57,8 +57,8 @@ def load_and_combine_data(data_dir: Path):
     print(f"   Loading datasets from: {data_dir}")
     
     # CHECK: Ensure files exist before reading
-    train_path = data_dir / "train.csv"
-    eval_path = data_dir / "eval.csv"
+    train_path = data_dir / "train_processed.csv"
+    eval_path = data_dir / "eval_processed.csv"
     
     if not train_path.exists():
         raise FileNotFoundError(f"❌ Could not find {train_path}. Check your 'data/processed' folder.")

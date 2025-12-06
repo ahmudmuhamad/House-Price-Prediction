@@ -12,8 +12,12 @@ Apply Feature Engineering.
 import pandas as pd
 from pathlib import Path
 
+import pickle
+
 INTERIM_DIR = Path("data/interim")
 PROCESSED_DIR = Path("data/processed")
+ARTIFACTS_DIR = Path("models/artifacts")
+ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
 
 def _extract_date_features(df: pd.DataFrame) -> pd.DataFrame:
     """Extracts month/year and drops the raw date object."""
@@ -47,7 +51,7 @@ def _apply_frequency_encoding(train: pd.DataFrame, eval_df: pd.DataFrame, holdou
     eval_df["zipcode_freq"] = eval_df["zipcode"].map(zip_counts).fillna(0)
     holdout["zipcode_freq"] = holdout["zipcode"].map(zip_counts).fillna(0)
     
-    return train, eval_df, holdout
+    return train, eval_df, holdout, zip_counts
 
 def run_transformation(
     input_dir: Path | str = INTERIM_DIR,
@@ -72,7 +76,13 @@ def run_transformation(
     # 3. Stateful Transformations (Frequency Encoding)
     # We must pass all three to keep them synced
     print("   Applying Frequency Encoding to zipcodes...")
-    train, eval_df, holdout = _apply_frequency_encoding(train, eval_df, holdout)
+    train, eval_df, holdout, zip_counts = _apply_frequency_encoding(train, eval_df, holdout)
+    
+    # Save Artifact
+    artifact_path = ARTIFACTS_DIR / "freq_map.pkl"
+    with open(artifact_path, "wb") as f:
+        pickle.dump(zip_counts, f)
+    print(f"   💾 Saved Frequency Map Artifact to {artifact_path}")
 
     # 4. Save Final Processed Data
     train.to_csv(out_dir / "train_processed.csv", index=False)

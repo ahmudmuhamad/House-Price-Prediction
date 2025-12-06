@@ -97,7 +97,7 @@ def preprocess_new_data(df: pd.DataFrame, imputer_dict: dict, freq_map: dict) ->
         
     # 5. Filter for Numeric Columns Only (Safety)
     # Drop IDs that aren't features but were kept for tracking
-    model_input = df.drop(columns=["zipcode", "state_id"], errors="ignore")
+    model_input = df.drop(columns=["zipcode", "state_id", "price", "year"], errors="ignore")
     model_input = model_input.select_dtypes(include=[np.number])
     
     return model_input
