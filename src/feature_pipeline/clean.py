@@ -1,26 +1,25 @@
 """
 Clean the dataset.
 
-- Reads from: data/interim/ (Train/Eval/Holdout)
-- Performs:
-    1. Drop high-VIF/redundant columns.
-    2. Drop leakage columns.
-    3. Drop unused text columns (City, etc.).
-    4. Impute 'Zero' values in price columns using Training Medians.
-- Writes to:  data/interim/ (Overwrites or saves as *_cleaned.csv - we will use suffix)
+- Reads from: data/interim/
+- Logic:
+    1. Drops bad columns.
+    2. Calculates Medians on TRAIN.
+    3. ***SAVES Medians to models/artifacts/imputer.json*** (The Artifact)
+    4. Imputes 0s in all datasets using that saved artifact.
+- Writes to:  data/interim/*_cleaned.csv
 """
 
 import pandas as pd
 import numpy as np
+import json
 from pathlib import Path
 
-INTERIM_DIR = Path("data/interim")
+INTERIM_DIR = Path("data/processed")
+ARTIFACTS_DIR = Path("models/artifacts")
+ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
 
-# 1. Columns to Drop
-# 'median_sale_price': LEAKAGE. It's the answer key (almost identical to 'price').
-# 'Total Population': High VIF (Sum of other columns).
-# 'Total School Enrollment': High VIF (Duplicate of School Age Pop).
-# 'city', 'city_full': Text columns not used in this numerical model.
+# Config
 COLS_TO_DROP = [
     "median_sale_price", 
     "Total Population", 
@@ -28,31 +27,24 @@ COLS_TO_DROP = [
     "city",
     "city_full"
 ]
-
-# 2. Columns where '0.0' is a bug (Money/Size cannot be zero)
 ZERO_FIX_COLS = ["median_list_price", "median_ppsf"]
 
 def _apply_generic_cleaning(df: pd.DataFrame) -> pd.DataFrame:
-    """Stateless cleaning applied to any dataset (Train/Eval/Holdout)."""
+    """Stateless cleaning (Drops columns)."""
     df = df.copy()
-
-    # Drop Redundant/Leakage/Text Columns
     cols_present = [c for c in COLS_TO_DROP if c in df.columns]
     if cols_present:
-        print(f"   Note: Dropping columns {cols_present}")
         df = df.drop(columns=cols_present)
-    
     return df
 
-def _fix_zeros_with_train_medians(df: pd.DataFrame, medians: dict) -> pd.DataFrame:
-    """Replace 0s with provided medians (Stateful cleaning)."""
+def _fix_zeros_with_medians(df: pd.DataFrame, medians: dict) -> pd.DataFrame:
+    """Replace 0s with provided medians."""
     df = df.copy()
-    for col in ZERO_FIX_COLS:
+    for col, value in medians.items():
         if col in df.columns:
             # Replace 0 with NaN first, then fill
-            # This handles both explicit 0 and existing NaNs
             df[col] = df[col].replace(0, np.nan)
-            df[col] = df[col].fillna(medians[col])
+            df[col] = df[col].fillna(value)
     return df
 
 def run_cleaning(
@@ -68,33 +60,37 @@ def run_cleaning(
     eval_df = pd.read_csv(in_dir / "eval.csv")
     holdout = pd.read_csv(in_dir / "holdout.csv")
 
-    # 2. Apply Generic Cleaning (Drops)
+    # 2. Apply Generic Cleaning
     train = _apply_generic_cleaning(train)
     eval_df = _apply_generic_cleaning(eval_df)
     holdout = _apply_generic_cleaning(holdout)
 
-    # 3. Calculate Medians on TRAIN ONLY (Prevent Leakage)
-    # We calculate the median of non-zero values
+    # 3. Calculate Medians (THE ARTIFACT)
     fill_values = {}
     for col in ZERO_FIX_COLS:
         if col in train.columns:
             # Median of rows where value is NOT 0
-            median_val = train.loc[train[col] > 0, col].median()
+            median_val = float(train.loc[train[col] > 0, col].median())
             fill_values[col] = median_val
-            print(f"   ℹ️ Calculated median for {col} (Train): {median_val:,.2f}")
+            print(f"   ℹ️ Calculated median for {col}: {median_val:,.2f}")
 
-    # 4. Apply Fixes (Stateful)
-    train = _fix_zeros_with_train_medians(train, fill_values)
-    eval_df = _fix_zeros_with_train_medians(eval_df, fill_values)
-    holdout = _fix_zeros_with_train_medians(holdout, fill_values)
+    # 4. Save Artifact
+    artifact_path = ARTIFACTS_DIR / "imputer.json"
+    with open(artifact_path, "w") as f:
+        json.dump(fill_values, f)
+    print(f"   💾 Saved Imputer Artifact to {artifact_path}")
 
-    # 5. Save
+    # 5. Apply Fixes (Using the artifact values)
+    train = _fix_zeros_with_medians(train, fill_values)
+    eval_df = _fix_zeros_with_medians(eval_df, fill_values)
+    holdout = _fix_zeros_with_medians(holdout, fill_values)
+
+    # 6. Save Data
     train.to_csv(out_dir / "train_cleaned.csv", index=False)
     eval_df.to_csv(out_dir / "eval_cleaned.csv", index=False)
     holdout.to_csv(out_dir / "holdout_cleaned.csv", index=False)
 
-    print(f"✅ Cleaning complete. Files saved to {out_dir} with suffix '_cleaned.csv'")
-    print(f"   Train Shape: {train.shape}")
+    print("✅ Cleaning complete.")
 
 if __name__ == "__main__":
     run_cleaning()
