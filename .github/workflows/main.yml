@@ -7,17 +7,10 @@ on:
     branches: [ main ]
 
 env:
-  # Using your specific secret name
   AWS_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
-  
-  # Repo names matching your AWS ECR
   ECR_REPO_API: housing-api
   ECR_REPO_UI: housing-ui
-  
-  # FIXED: Matches your actual cluster name "housing-api-cluster"
   ECS_CLUSTER: housing-api-cluster
-  
-  # FIXED: Matches the service names we defined manually
   ECS_SERVICE_API: housing-api-service
   ECS_SERVICE_UI: housing-ui-service
 
@@ -34,11 +27,16 @@ jobs:
         with:
           python-version: '3.11'
 
+      # --- NEW: Install uv ---
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      # --- NEW: Install dependencies using uv ---
       - name: Install dependencies
+        # --system installs into the GitHub Runner's python environment
+        # . tells uv to read pyproject.toml in the current directory
         run: |
-          pip install --upgrade pip
-          pip install pytest httpx
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          uv pip install --system .
 
       - name: Run Tests
         run: |
