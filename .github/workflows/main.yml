@@ -1,0 +1,102 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  # Using your specific secret name
+  AWS_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+  
+  # Repo names matching your AWS ECR
+  ECR_REPO_API: housing-api
+  ECR_REPO_UI: housing-ui
+  
+  # FIXED: Matches your actual cluster name "housing-api-cluster"
+  ECS_CLUSTER: housing-api-cluster
+  
+  # FIXED: Matches the service names we defined manually
+  ECS_SERVICE_API: housing-api-service
+  ECS_SERVICE_UI: housing-ui-service
+
+jobs:
+  # 1. TEST JOB
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install pytest httpx
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Run Tests
+        run: |
+          pytest tests/test_smoke.py tests/test_inference_pipeline.py
+
+  # 2. DEPLOY JOB
+  build-and-deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # --- BUILD API ---
+      - name: Build and Push API
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.api
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPO_API }}:${{ github.sha }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPO_API }}:latest
+
+      # --- BUILD UI ---
+      - name: Build and Push UI
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.ui
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPO_UI }}:${{ github.sha }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPO_UI }}:latest
+
+      # --- DEPLOY API ---
+      - name: Deploy API Service
+        run: |
+          aws ecs update-service \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --service ${{ env.ECS_SERVICE_API }} \
+            --force-new-deployment
+
+      # --- DEPLOY UI ---
+      - name: Deploy UI Service
+        run: |
+          aws ecs update-service \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --service ${{ env.ECS_SERVICE_UI }} \
+            --force-new-deployment
