@@ -11,19 +11,22 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 # Set working directory
 WORKDIR /app
 
-# Copy dependency definition
+# Copy dependency definition AND metadata files
 COPY pyproject.toml .
+COPY README.md .
+COPY LICENSE .
 
 # Install dependencies using uv
 RUN uv pip install --system .
 
-# Copy source code and data
+# Copy ONLY source code
 COPY src ./src
 
+# Create empty directories for S3 downloads
+RUN mkdir -p data/processed
 
 # Expose the port
 EXPOSE 8501
 
 # Command to run the application
-# We use src/app/ui.py as the entrypoint
 CMD ["streamlit", "run", "src/app/ui.py", "--server.port", "8501", "--server.address", "0.0.0.0"]

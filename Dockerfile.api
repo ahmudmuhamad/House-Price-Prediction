@@ -5,26 +5,26 @@ FROM python:3.11-slim
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-# Install uv (The user specifically requested uv)
+# Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 
 # Set working directory
 WORKDIR /app
 
-# Copy dependency definition
+# Copy dependency definition AND metadata files
 COPY pyproject.toml .
+COPY README.md .
+COPY LICENSE .
 
 # Install dependencies using uv
-# --system installs into the system python (no venv) which is fine for docker
-# --deploy ensures lockfile consistency if we had one (we don't seemingly, so maybe skip --deploy)
+# We use '.' to install the project itself + dependencies defined in pyproject.toml
 RUN uv pip install --system .
 
-# Copy source code, models, and data
+# Copy source code
 COPY src ./src
 
-
-# Create directory for artifacts if it relies on writes (optional, but good practice)
-RUN mkdir -p models/artifacts
+# Create empty directories for S3 downloads
+RUN mkdir -p models/artifacts data/processed
 
 # Expose the port
 EXPOSE 8000
