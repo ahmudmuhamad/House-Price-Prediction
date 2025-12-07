@@ -20,23 +20,43 @@ from src.api.v1.endpoints import router as v1_router
 BUCKET_NAME = "my-house-price-bucket-ml-project"
 REGION = "eu-north-1"
 
+
+
+
 def download_s3_artifacts():
     s3_client = boto3.client('s3', region_name=REGION)
+    
     downloads = {
         "models/model.pkl": PROJECT_ROOT / "models" / "model.pkl",
         "models/artifacts/imputer.json": PROJECT_ROOT / "models" / "artifacts" / "imputer.json",
         "models/artifacts/freq_map.pkl": PROJECT_ROOT / "models" / "artifacts" / "freq_map.pkl",
-        "data/processed/train_cleaned.csv": PROJECT_ROOT / "data" / "processed" / "train_cleaned.csv" 
+        "data/processed/train_cleaned.csv": PROJECT_ROOT / "data" / "processed" / "reference_train.csv" 
     }
+    
     print(f"⬇️ Checking S3 Artifacts in bucket: {BUCKET_NAME}...")
+    
     for s3_key, local_path in downloads.items():
         local_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # --- THE FIX: Check local existence first ---
+        if local_path.exists():
+            print(f"   ✅ Found local file: {local_path.name} (Skipping download)")
+            continue
+        # --------------------------------------------
+
         try:
+            # Check remote existence
             s3_client.head_object(Bucket=BUCKET_NAME, Key=s3_key)
             print(f"   Downloading {s3_key}...")
             s3_client.download_file(BUCKET_NAME, s3_key, str(local_path))
-        except ClientError:
-            print(f"   ⚠️ S3 Key {s3_key} not found. Continuing...")
+        except ClientError as e:
+            if e.response['Error']['Code'] == "404":
+                print(f"   ⚠️ S3 Key {s3_key} not found. Continuing...")
+            else:
+                print(f"   ⚠️ S3 Error: {e}")
+
+
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
