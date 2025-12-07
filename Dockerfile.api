@@ -21,8 +21,7 @@ RUN uv pip install --system .
 
 # Copy source code, models, and data
 COPY src ./src
-COPY models ./models
-COPY data ./data
+
 
 # Create directory for artifacts if it relies on writes (optional, but good practice)
 RUN mkdir -p models/artifacts

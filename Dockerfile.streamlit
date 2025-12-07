@@ -19,7 +19,7 @@ RUN uv pip install --system .
 
 # Copy source code and data
 COPY src ./src
-COPY data ./data
+
 
 # Expose the port
 EXPOSE 8501
