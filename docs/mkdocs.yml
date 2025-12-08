@@ -1,4 +1,65 @@
-site_name: e2e_house_price_estimator
-# 
-site_author: Ahmed Muhammad Ahmed\
-# 
+site_name: House Price MLOps
+site_description: End-to-End Machine Learning Pipeline Documentation
+site_author: Ahmed Muhammad Ahmed 
+repo_url: https://github.com/ahmudmuhamad/House-Price-Prediction
+
+theme:
+  name: material
+  palette: 
+    # Light Mode
+    - scheme: default
+      primary: teal
+      accent: purple
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    # Dark Mode
+    - scheme: slate
+      primary: teal
+      accent: purple
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - content.code.copy
+    - content.code.annotate
+
+plugins:
+  - search
+
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          paths: [".."]
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - admonition
+  - pymdownx.details
+  - attr_list
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Architecture: architecture.md
+  - Pipelines:
+      - Feature Pipeline: pipelines/feature.md
+      - Training Pipeline: pipelines/training.md
+      - Inference Pipeline: pipelines/inference.md
+  - Deployment: deployment.md
+  - API Reference: api_ref.md
+
+extra_javascript:
+  - https://unpkg.com/mermaid@10.0.2/dist/mermaid.min.js
